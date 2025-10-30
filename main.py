@@ -13,7 +13,12 @@ app = FastAPI(title="In One We Trust API")
 # Allow local frontend during dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://inonewetrust.com",
+        "https://www.inonewetrust.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
