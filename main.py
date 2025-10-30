@@ -28,9 +28,16 @@ app.add_middleware(
 def root():
     return {"message": "Welcome to In One We Trust API"}
 
+# Add server time/version to /health
+from datetime import datetime, timezone
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "version": "0.0.1"
+    }
 
 from fastapi import Query
 from pydantic import BaseModel
