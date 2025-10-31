@@ -5,77 +5,52 @@ Created on Wed Oct 29 20:55:02 2025
 @author: G756
 """
 
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timezone
+from typing import Optional
 
 app = FastAPI(title="In One We Trust API")
 
-# Allow local frontend during dev
+# --- CORS: only allow your site (add preview if you use it) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
         "https://inonewetrust.com",
         "https://www.inonewetrust.com",
+        # add Vercel preview domains if needed, e.g.:
+        # "https://inonewetrust-frontend.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/")
-def root():
-    return {"message": "Welcome to In One We Trust API"}
+API_KEY = os.getenv("API_KEY")  # set in Render
 
-# Add server time/version to /health
-from datetime import datetime, timezone
+async def require_api_key(x_api_key: Optional[str] = Header(None)):
+    # Allow /health without a key so you can probe uptime
+    if not API_KEY:
+        return
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
 @app.get("/health")
 def health():
     return {
         "status": "ok",
         "server_time": datetime.now(timezone.utc).isoformat(),
-        "version": "0.0.1"
+        "version": "0.0.1",
     }
 
-from fastapi import Query
-from pydantic import BaseModel
-
-class SearchResult(BaseModel):
-    query: str
-    normalized: str
-    type: str  # "ticker" | "company"
-    suggestions: list[str]
-
-@app.get("/search", response_model=SearchResult)
-def search(q: str = Query(..., min_length=1, max_length=20)):
-    # Very simple placeholder logic for now:
-    raw = q.strip()
-    norm = raw.upper()
-    # If it looks like a ticker (A-Z, 1–5 chars), treat it as one
-    if norm.isalpha() and 1 <= len(norm) <= 5:
-        return SearchResult(
-            query=raw,
-            normalized=norm,
-            type="ticker",
-            suggestions=[norm]  # later this can return best matches
-        )
-    # Otherwise, assume company name and return an empty suggestion list for now
-    return SearchResult(
-        query=raw,
-        normalized=raw.title(),
-        type="company",
-        suggestions=[]
-    )
-
+# Example: protect everything else with API key
 from pydantic import BaseModel
 from typing import List
 
-# ---------- Models ----------
 class Signal(BaseModel):
     symbol: str
-    action: str          # BUY | SELL | HOLD
+    action: str
     score: float
     reasons: List[str]
 
@@ -83,29 +58,25 @@ class LuckyResponse(BaseModel):
     picks: List[Signal]
     note: str
 
-# ---------- Helpers (placeholder logic) ----------
 def compute_signal(symbol: str) -> Signal:
     s = symbol.upper().strip()
-    # Dumb demo logic: even-length tickers = BUY, odd = HOLD; add simple reasons.
     score = (len(s) % 2) * 0.5 + 1.0
     action = "BUY" if len(s) % 2 == 0 else "HOLD"
-    reasons = [
-        "Placeholder engine: deterministic demo",
-        f"Symbol length = {len(s)} → score {score:.2f}"
-    ]
-    return Signal(symbol=s, action=action, score=round(score, 2), reasons=reasons)
+    reasons = ["Placeholder engine", f"len={len(s)} score={score:.2f}"]
+    return Signal(symbol=s, action=action, score=round(score,2), reasons=reasons)
 
-# ---------- Routes ----------
-@app.get("/signal/{symbol}", response_model=Signal)
+@app.get("/search", dependencies=[Depends(require_api_key)])
+def search(q: str):
+    norm = q.strip().upper()
+    t = "ticker" if norm.isalpha() and 1 <= len(norm) <= 5 else "company"
+    return {"query": q, "normalized": norm if t=="ticker" else q.title(), "type": t, "suggestions": [norm] if t=="ticker" else []}
+
+@app.get("/signal/{symbol}", response_model=Signal, dependencies=[Depends(require_api_key)])
 def get_signal(symbol: str):
     return compute_signal(symbol)
 
-@app.get("/lucky", response_model=LuckyResponse)
+@app.get("/lucky", response_model=LuckyResponse, dependencies=[Depends(require_api_key)])
 def lucky():
-    # Demo universe; later you’ll use your ranked list with constraints.
-    universe = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "JPM", "UNH", "XOM"]
+    universe = ["AAPL","MSFT","NVDA","GOOGL","AMZN","META","AVGO","JPM","UNH","XOM"]
     picks = [compute_signal(s) for s in universe[:5]]
-    return LuckyResponse(
-        picks=picks,
-        note="Demo picks. Not investment advice. Real logic coming soon."
-    )
+    return LuckyResponse(picks=picks, note="Demo picks.")
