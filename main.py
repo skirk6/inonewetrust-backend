@@ -20,7 +20,7 @@ app.add_middleware(
         "https://inonewetrust.com",
         "https://www.inonewetrust.com",
         # add Vercel preview domains if needed, e.g.:
-        # "https://inonewetrust-frontend.vercel.app",
+        "https://inonewetrust-frontend.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
